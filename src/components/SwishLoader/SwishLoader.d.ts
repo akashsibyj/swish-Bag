@@ -1,7 +1,7 @@
 import type { CSSProperties, NamedExoticComponent } from 'react';
 
 export interface SwishLoaderProps {
-  /** Loop (5.02 s: drop, "....." as the bag lands, SWiSH typed once settled and held, then the bag and display fade out in place and the drop replays). false = play once and hold on SWISH. Default true. */
+  /** Default false: plays once (bag drops, settles, SWiSH is typed) and holds the finished frame. true loops every 5.02 s (the bag and display fade out in place and the drop replays). */
   loop?: boolean;
   /** Fixed overlay covering the viewport. Default false (fills its parent; the loader is centred in it). */
   fullscreen?: boolean;

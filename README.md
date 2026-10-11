@@ -5,8 +5,9 @@ code (it scans to https://www.swishhh.net), drops onto a silver digital scale, t
 by frame to the reference video. The scale's green standby LED is always lit. As the bag tumbles on
 landing and its right side comes down onto the scale, the display shows `. . . . .` (evenly spaced); once the bag has settled each dot
 turns into its letter in place, one every 0.28 s — `S....`, `SW...`, `SWi..`, `SWiS.`, **SWiSH** — on a 16-segment readout with a small `i`,
-in the reference project's segment green (#2FE8AC). SWiSH then holds; when looping, the bag and the
-display fade out where they are (the bag does not lift away) and the drop simply replays (5.02 s cycle).
+in the reference project's segment green (#2FE8AC). The animation plays **once** and then holds that
+finished frame (bag on the scale, SWiSH lit, quote underneath). With `loop` turned on, the bag and
+display instead fade out where they are and the drop replays every 5.02 s.
 
 ## How it works (no video is played)
 
@@ -92,12 +93,13 @@ import SwishLoader from './components/SwishLoader';
 <SwishLoader />                         // fills its parent (880:720 if it has no height), loader centred
 <SwishLoader fullscreen />              // fixed overlay over the whole viewport
 <SwishLoader style={{ '--swish-size': '240px' }} />   // choose the loader's height
-<SwishLoader loop={false} onComplete={() => setReady(true)} />
+<SwishLoader onComplete={() => setReady(true)} />   // plays once, holds, tells you when SWiSH is done
+<SwishLoader loop />                    // repeats every 5.02 s
 ```
 
 | Prop         | Default     | Description                                              |
 | ------------ | ----------- | -------------------------------------------------------- |
-| `loop`       | `true`      | Loop (5.02 s); `false` plays once and holds on SWiSH      |
+| `loop`       | `false`     | `false`: play once and hold on SWiSH; `true`: repeat every 5.02 s |
 | `fullscreen` | `false`     | Fixed overlay covering the viewport                      |
 | `motion`     | `"auto"`    | `"always"` animates even when the OS asks for reduced motion |
 | `speed`      | `1`         | Playback-rate multiplier (clamped to 0.1–10)             |

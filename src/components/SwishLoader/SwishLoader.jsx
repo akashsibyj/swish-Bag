@@ -105,7 +105,7 @@ function decode(src) {
  * animations — no React renders while it plays.
  *
  * @param {object}   props
- * @param {boolean}  [props.loop=true]        Loop. false = play once and hold on SWISH.
+ * @param {boolean}  [props.loop=false]       Play once and hold on SWiSH (default); true loops.
  * @param {boolean}  [props.fullscreen=false] Fixed overlay covering the viewport.
  * @param {'auto'|'always'} [props.motion='auto'] 'auto' shows a still frame when the OS asks
  *                                            for reduced motion; 'always' animates regardless.
@@ -120,7 +120,7 @@ function decode(src) {
 const DEFAULT_QUOTE = 'Still working… good food takes a moment.';
 
 function SwishLoader({
-  loop = true,
+  loop = false,
   fullscreen = false,
   motion = 'auto',
   speed = 1,
