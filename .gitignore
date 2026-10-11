@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Vite cache
+.vite/
+node_modules/.vite/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Editors and OS files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Coverage / test output
+coverage/
+
+# Preview renders and screen recordings (not part of the app)
+Claude outputs/
+*.mp4
+*.mov
+*.webm
+
+# Obsolete files from earlier builds; nothing uses them (safe to delete locally)
+src/components/SwishLoader/assets/bag-frames.webp
+src/components/SwishLoader/assets/shadow-frames.webp
+public/favicon.svg

@@ -1,0 +1,248 @@
+/* ==========================================================================
+   SwishLoader — layout and animation bindings.
+   Keyframes live in SwishLoader.timeline.css (measured from the reference).
+
+   Layout: a compact loader, centred in whatever box it is given. The FRAME is
+   the loader's footprint - the resting bag and the scale (stage x 206-676,
+   y 180-690 of the 880 x 720 scene) - sized with --swish-size and centred,
+   with the quote under it. The scene's SVG is positioned around the frame and
+   allowed to overflow it, so the studio backdrop fills the rest of the box
+   seamlessly and the bag still drops in from above.
+   ========================================================================== */
+
+.swish-loader {
+  --swish-cycle: calc(5.02s * var(--swish-ts, 1));
+  /* Loader height: comfortable on desktop, small on phones, never larger than the box allows. */
+  --swish-frame-h: var(--swish-size, min(clamp(190px, 44vmin, 360px), 72cqh, calc(84cqw * 510 / 470)));
+  container: swish-loader / size;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 880 / 720;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  isolation: isolate;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.swish-loader--fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  z-index: var(--swish-z, 9999);
+}
+
+.swish-loader__frame {
+  position: relative;
+  flex: none;
+  height: var(--swish-frame-h);
+  width: calc(var(--swish-frame-h) * 470 / 510);
+}
+
+/* Browsers without container units: size from the viewport only. */
+@supports not (width: 1cqw) {
+  .swish-loader__frame {
+    height: var(--swish-size, clamp(190px, 44vmin, 360px));
+    width: calc(var(--swish-size, clamp(190px, 44vmin, 360px)) * 470 / 510);
+  }
+}
+
+/* The full scene (880 x 720) placed so that its x 206-676 / y 180-690 window is the frame. */
+.swish-loader__stage {
+  position: absolute;
+  left: calc(-206 / 470 * 100%);
+  top: calc(-180 / 510 * 100%);
+  width: calc(880 / 470 * 100%);
+  height: calc(720 / 510 * 100%);
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Away from the loader the studio backdrop settles into one flat tone, so a small loader
+   in a big box reads as clean, centred and calm (no lighting blotches at the edges). */
+.swish-loader::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    calc(var(--swish-frame-h) * 1.7) calc(var(--swish-frame-h) * 1.35) at 50% 50%,
+    rgba(208, 208, 210, 0) 36%,
+    rgba(208, 208, 210, 0.55) 60%,
+    rgba(208, 208, 210, 0.9) 78%,
+    #d0d0d2 92%
+  );
+}
+
+/* The line under the loader (the reference project's copy). */
+.swish-loader__quote {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  max-width: calc(100% - 32px);
+  margin: calc(var(--swish-frame-h) * 0.07) 0 0;
+  font: 500 14px / 1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: clamp(12px, calc(var(--swish-frame-h) * 0.046), 17px);
+  letter-spacing: 0.01em;
+  color: rgba(17, 17, 17, 0.72);
+  text-align: center;
+  text-wrap: balance;
+  animation: swish-quote-in 600ms ease 200ms both;
+}
+
+@keyframes swish-quote-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (forced-colors: active) {
+  .swish-loader__quote { color: CanvasText; }
+}
+
+.swish-loader__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.swish-loader__marker {
+  position: absolute;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Resting composition (also the reduced-motion frame): bag on the scale,
+   SWISH lit, standby LED on, no streaks.
+   -------------------------------------------------------------------------- */
+.swish-loader__f,
+.swish-loader__dot,
+.swish-loader__streaks {
+  opacity: 0;
+}
+.swish-loader__f.swish-loader__rest,
+.swish-loader__glyph {
+  opacity: 1;
+}
+.swish-loader__streak {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.swish-loader__glide {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  will-change: transform, opacity;
+}
+
+/* --------------------------------------------------------------------------
+   Timeline bindings. One shared cycle; keyframes are measured samples.
+   Per-frame layers get their animation-name inline:
+   swish-loader-o<k> (visibility) and swish-loader-g<k> (glide).
+   -------------------------------------------------------------------------- */
+.swish-loader__f,
+.swish-loader__bag,
+.swish-loader__unshadow,
+.swish-loader__clear,
+.swish-loader__streaks,
+.swish-loader__streak,
+.swish-loader__dot,
+.swish-loader__glyph,
+.swish-loader__readout,
+.swish-loader__marker {
+  animation-duration: var(--swish-cycle);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+}
+
+/* Looping: after the hold the bag fades out where it stands (no lift) and the drop replays. */
+.swish-loader__bag { animation-name: swish-loader-bag-out; }
+.swish-loader__unshadow { animation-name: swish-loader-unshadow; }
+.swish-loader__clear { animation-name: swish-loader-clear; }
+.swish-loader__streaks { animation-name: swish-loader-streaks; }
+.swish-loader__readout { animation-name: swish-loader-hot; }
+/* .swish-loader__streak (swish-loader-sk<i>), __dot (swish-loader-dot<i>) and
+   __glyph (swish-loader-gl<i>) get their animation-name inline. */
+
+/* Fires onComplete when SWiSH completes (3.36 s into each cycle). */
+.swish-loader__marker {
+  animation-name: swish-loader-mark;
+  animation-delay: calc(3.36s * var(--swish-ts, 1));
+}
+
+/* Fallback while the bag footage is unavailable: the resting bag follows the
+   measured path (position, tilt, scale) with its resting shadow. */
+.swish-loader[data-fallback] .swish-loader__f:not(.swish-loader__rest) {
+  display: none;
+}
+.swish-loader[data-fallback] .swish-loader__rest-bag {
+  opacity: 1;
+  animation-name: swish-loader-bag-fallback !important;
+  transform-origin: 440.65px 421.62px; /* pivot of the measured path: centroid of the resting bag */
+}
+.swish-loader[data-fallback] .swish-loader__rest-ground {
+  animation-name: swish-loader-shadow-fallback !important;
+}
+
+/* Play once: no outro; every layer holds its last keyframe (bag on the scale, SWISH lit). */
+.swish-loader--once .swish-loader__f,
+.swish-loader--once .swish-loader__streaks,
+.swish-loader--once .swish-loader__streak,
+.swish-loader--once .swish-loader__dot,
+.swish-loader--once .swish-loader__glyph,
+.swish-loader--once .swish-loader__readout,
+.swish-loader--once .swish-loader__marker {
+  animation-iteration-count: 1;
+}
+.swish-loader--once .swish-loader__bag,
+.swish-loader--once .swish-loader__unshadow,
+.swish-loader--once .swish-loader__clear {
+  animation: none;
+}
+
+/* Hold at t = 0 until every image layer has decoded. */
+.swish-loader[data-pending] *,
+.swish-loader[data-pending] {
+  animation-play-state: paused !important;
+}
+
+/* Reduced motion (OS setting): the finished frame (bag on the scale, SWISH and the LED lit);
+   no fall, no loop. motion="always" (data-motion) opts out, e.g. for previews over Remote
+   Desktop, which often switches the Windows animation setting off. */
+@media (prefers-reduced-motion: reduce) {
+  .swish-loader:not([data-motion='always']) * {
+    animation: none !important;
+  }
+  .swish-loader:not([data-motion='always']) .swish-loader__marker {
+    animation: swish-loader-mark 0.01s linear 0s 1 both !important;
+  }
+  .swish-loader:not([data-motion='always']) .swish-loader__clear {
+    animation: swish-loader-reveal 0.4s ease-out 0.1s 1 both !important;
+  }
+}
+
+@keyframes swish-loader-mark {
+  from { opacity: 0; }
+  to { opacity: 0; }
+}
+
+@keyframes swish-loader-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

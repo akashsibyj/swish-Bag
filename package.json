@@ -1,0 +1,27 @@
+{
+  "name": "swish-bag-loader",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Swish loading animation (paper bag drops onto a digital scale that spells SWISH) as a React component.",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "prestart": "node scripts/preflight.mjs",
+    "start": "vite",
+    "predev": "node scripts/preflight.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/preflight.mjs",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.7.0",
+    "vite": "5.4.21"
+  }
+}
