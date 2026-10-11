@@ -65,7 +65,7 @@ const REST_TO = (TIMELINE.holdEnd - 0.08) / TIMELINE.cycle;
 /** Milliseconds until the fallback bag is at rest (0 = now), read from its running animation. */
 function msUntilRest(root) {
   try {
-    const bag = root.querySelector('.swish-loader__rest-bag');
+    const bag = root.querySelector('.swish-loader__fallback-bag');
     const anim = bag?.getAnimations?.().find((a) => a.animationName === 'swish-loader-bag-fallback');
     if (!anim || anim.playState === 'finished' || anim.playState === 'idle') return 0;
     const { progress, duration } = anim.effect.getComputedTiming();
@@ -389,6 +389,16 @@ function SwishLoader({
               height={GROUND.height}
             />
           </g>
+          {/* fallback shadow: runs on the same clock as everything else, shown only in fallback mode */}
+          <g className="swish-loader__fallback-ground">
+            <image
+              href={INLINE.groundRest}
+              x={GROUND.x}
+              y={GROUND.y}
+              width={GROUND.width}
+              height={GROUND.height}
+            />
+          </g>
         </g>
 
         {/* LCD: a fixed five-cell 16-segment readout ("SWiSH", small i). Each cell holds a
@@ -449,6 +459,26 @@ function SwishLoader({
             );
           })}
           <g className="swish-loader__f swish-loader__glide swish-loader__rest swish-loader__rest-bag" style={REST_BAG_STYLE}>
+            <image
+              href={INLINE.bagRest}
+              x={BAG_REST.x}
+              y={BAG_REST.y}
+              width={BAG_REST.width}
+              height={BAG_REST.height}
+            />
+            <image
+              href={INLINE.sealRest}
+              x={BAG_REST.x}
+              y={BAG_REST.y}
+              width={BAG_REST.width}
+              height={BAG_REST.height}
+            />
+          </g>
+          {/* Fallback bag (the resting bag moved along the measured path) for while the footage is
+              still downloading. It is a SEPARATE layer that animates on the shared clock from the
+              start and is only made visible in fallback mode: switching to the footage just flips
+              visibility, so no animation is ever restarted and nothing can fall out of step. */}
+          <g className="swish-loader__fallback-bag">
             <image
               href={INLINE.bagRest}
               x={BAG_REST.x}

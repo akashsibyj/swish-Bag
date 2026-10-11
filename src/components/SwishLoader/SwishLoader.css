@@ -186,22 +186,41 @@
   animation-delay: calc(3.36s * var(--swish-ts, 1));
 }
 
-/* Fallback while the bag footage is unavailable: the resting bag follows the
-   measured path (position, tilt, scale) with its resting shadow. */
-.swish-loader[data-fallback] .swish-loader__f:not(.swish-loader__rest) {
-  display: none;
+/* Fallback while the bag footage is still downloading (or failed): the resting bag follows the
+   measured path (position, tilt, scale) with its resting shadow.
+
+   Both the footage layers and the fallback layers animate on the same clock ALL the time;
+   data-fallback only flips which set is visible. Never change animation-name or display here:
+   either one restarts the affected animations from zero at the moment of the switch, which
+   threw the bag out of step with the display (bag missing or falling at the wrong time). */
+.swish-loader__fallback-bag,
+.swish-loader__fallback-ground {
+  visibility: hidden;
+  animation-duration: var(--swish-cycle);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
 }
-.swish-loader[data-fallback] .swish-loader__rest-bag {
-  opacity: 1;
-  animation-name: swish-loader-bag-fallback !important;
+.swish-loader__fallback-bag {
+  animation-name: swish-loader-bag-fallback;
+  transform-box: view-box;
   transform-origin: 440.65px 421.62px; /* pivot of the measured path: centroid of the resting bag */
 }
-.swish-loader[data-fallback] .swish-loader__rest-ground {
-  animation-name: swish-loader-shadow-fallback !important;
+.swish-loader__fallback-ground {
+  animation-name: swish-loader-shadow-fallback;
+}
+.swish-loader[data-fallback] .swish-loader__f {
+  visibility: hidden;
+}
+.swish-loader[data-fallback] .swish-loader__fallback-bag,
+.swish-loader[data-fallback] .swish-loader__fallback-ground {
+  visibility: visible;
 }
 
 /* Play once: no outro; every layer holds its last keyframe (bag on the scale, SWISH lit). */
 .swish-loader--once .swish-loader__f,
+.swish-loader--once .swish-loader__fallback-bag,
+.swish-loader--once .swish-loader__fallback-ground,
 .swish-loader--once .swish-loader__streaks,
 .swish-loader--once .swish-loader__streak,
 .swish-loader--once .swish-loader__dot,
