@@ -15,6 +15,8 @@ export interface SwishLoaderProps {
   onComplete?: () => void;
   /** Line shown under the loader. Default "Still working… good food takes a moment."; false hides it. */
   quote?: string | false;
+  /** Bag footage resolution. 'auto' (default): 1x on phones and ordinary screens, 2x for a large loader on a high-density screen. */
+  resolution?: 'auto' | '1x' | '2x';
   className?: string;
   /** Passed to the root. Set `'--swish-size'` (a CSS length) to choose the loader's height. */
   style?: CSSProperties;

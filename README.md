@@ -69,10 +69,14 @@ src/
       frames.js                position of each video frame in the image sheets
       assets.js                small image layers (backdrop, scale, resting bag + its seals), inlined
       readout.js               the 16-segment LCD readout (geometry, colour), shared with the LED
+      player.js                draws the bag's video frames (3 reusable slots, clocked by the CSS)
+      track.js                 measured timing/positions of each video frame (generated)
+      sheets.js                picks the 1x or 2x footage for the screen
       assets/bag-frames-0.webp the moving bag, one 2x cut-out per video frame (sheet 1 of 2)
       assets/bag-frames-1.webp the moving bag (sheet 2 of 2)
       assets/ground-frames.webp the bag's shadow/reflection on the scale top, per frame
       assets/seal-frames.webp  the tamper tapes + FEEDBACK/QR label, registered to each video frame
+      assets/1x/               the same four sheets at half resolution (phones, ordinary screens)
       SwishLoader.d.ts         TypeScript types
       index.js                 export
 ```
@@ -106,6 +110,7 @@ import SwishLoader from './components/SwishLoader';
 | `label`      | `"Loading"` | Text announced to screen readers                         |
 | `onComplete` | –           | Called each time SWiSH completes (3.36 s into a cycle)   |
 | `quote`      | *see below* | Line under the loader; `false` hides it                  |
+| `resolution` | `"auto"`    | Bag footage: `"1x"` (phones, normal screens), `"2x"` (large high-density screens) |
 | `className`, `style` | –   | Passed to the root element                               |
 
 ## The seals
@@ -150,4 +155,9 @@ moment."*, shown from the start. Pass `quote="…"` to change it or `quote={fals
 - **Errors:** error boundaries keep the page alive (after a render failure the page shows
   "Loading…" and remounts the loader, up to 3 times; a failed app download shows a Reload
   button); unexpected errors are logged to the console with a `[swish]` prefix.
+- **Phones / memory:** iPhone Safari closes a page that uses too much memory ("A problem
+  repeatedly occurred"). The bag's 47 video frames are therefore drawn by a small frame player
+  into three reusable slots (instead of 47 separately animated layers), and phones and ordinary
+  screens get the half-resolution footage. Graphics layers went from ~117 to ~24 and the page's
+  memory use roughly halved, with the same picture frame for frame.
 - **No network needed** beyond loading the app itself; no external fonts or CDNs.

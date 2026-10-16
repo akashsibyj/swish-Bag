@@ -4,14 +4,13 @@ import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
 
 // Start downloading the bag footage straight away, in parallel with the app bundle, so slow
-// mobile connections spend as little time as possible on the stand-in bag.
-import bagSheet0 from './components/SwishLoader/assets/bag-frames-0.webp';
-import bagSheet1 from './components/SwishLoader/assets/bag-frames-1.webp';
-import groundSheet from './components/SwishLoader/assets/ground-frames.webp';
-import sealSheet from './components/SwishLoader/assets/seal-frames.webp';
+// mobile connections spend as little time as possible on the stand-in bag. Only the set the
+// loader will actually use (1x on phones and ordinary screens, 2x on large high-density ones).
+import { pickSheets } from './components/SwishLoader/sheets';
 
 try {
-  for (const href of [bagSheet0, bagSheet1, groundSheet, sealSheet]) {
+  const sheets = pickSheets('auto');
+  for (const href of [...sheets.bag, sheets.ground, sheets.seal]) {
     if (typeof href !== 'string' || !href) continue;
     const link = document.createElement('link');
     link.rel = 'preload';

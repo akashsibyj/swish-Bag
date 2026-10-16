@@ -144,21 +144,21 @@
 .swish-loader__glyph {
   opacity: 1;
 }
+/* No will-change anywhere: every promoted element costs a graphics layer at full screen
+   density, and phones (iPhone Safari above all) close the page when those run out of memory. */
 .swish-loader__streak {
   transform-box: view-box;
   transform-origin: 0 0;
-  will-change: transform;
 }
 .swish-loader__glide {
   transform-box: view-box;
   transform-origin: 0 0;
-  will-change: transform, opacity;
 }
 
 /* --------------------------------------------------------------------------
    Timeline bindings. One shared cycle; keyframes are measured samples.
-   Per-frame layers get their animation-name inline:
-   swish-loader-o<k> (visibility) and swish-loader-g<k> (glide).
+   The resting frame gets its animation-name inline (swish-loader-o50 / -g50); video frames
+   3-49 are drawn by the frame player (player.js) on the same clock.
    -------------------------------------------------------------------------- */
 .swish-loader__f,
 .swish-loader__bag,
@@ -214,7 +214,8 @@
 .swish-loader__fallback-ground {
   animation-name: swish-loader-shadow-fallback;
 }
-.swish-loader[data-fallback] .swish-loader__f {
+.swish-loader[data-fallback] .swish-loader__f,
+.swish-loader[data-fallback] .swish-loader__slot {
   visibility: hidden;
 }
 .swish-loader[data-fallback] .swish-loader__fallback-bag,

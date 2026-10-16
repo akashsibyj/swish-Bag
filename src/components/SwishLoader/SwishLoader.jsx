@@ -1,9 +1,7 @@
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import * as INLINE from './assets';
-import bagSheet0 from './assets/bag-frames-0.webp';
-import bagSheet1 from './assets/bag-frames-1.webp';
-import groundSheet from './assets/ground-frames.webp';
-import sealSheet from './assets/seal-frames.webp';
+import { frameHeightFor, pickSheets } from './sheets';
+import { SLOT_COUNT, buildFrames, startFramePlayer } from './player';
 import { BAG_FRAMES, BAG_REST, BAG_SHEETS, GROUND, REST_FRAME, SEAL_FRAMES, SEAL_SHEET } from './frames';
 import {
   TIMELINE,
@@ -19,28 +17,22 @@ import { BLOOM_STD, READOUT_CELLS, SEG_ON } from './readout';
 import './SwishLoader.timeline.css';
 import './SwishLoader.css';
 
-// Bundlers return a URL string for image imports; Next.js returns { src }.
-const assetUrl = (mod) => (typeof mod === 'string' ? mod : (mod && mod.src) || '');
-const SHEET_URLS = [assetUrl(bagSheet0), assetUrl(bagSheet1)];
-const GROUND_URL = assetUrl(groundSheet);
-const SEAL_URL = assetUrl(sealSheet);
-
 const INLINE_SOURCES = [INLINE.backdrop, INLINE.plate, INLINE.bagRest, INLINE.groundRest, INLINE.sealRest];
-const FRAME_SOURCES = [...SHEET_URLS, GROUND_URL, SEAL_URL];
 // If the footage is not decoded by then, start right away with the built-in fallback
 // (never leave an empty scale on screen) and switch to the footage once it arrives.
 const FRAME_TIMEOUT_MS = 700;
 // Ground tiles are cropped 2 units inside their (fully feathered) edges, so texture filtering at
 // the crop never samples the neighbouring tile — that showed as a faint outline at fractional scales.
 const GROUND_INSET = 2;
+const FRAMES = buildFrames(GROUND_INSET);
+const SLOT_KEYS = Array.from({ length: SLOT_COUNT }, (_, i) => i);
 // Top haze (stage y): fully backdrop above `from`, fully clear below `to`.
 const TOP_FADE = { from: 0, to: 36 };
 
-// Per-frame animations (visibility + glide), built once so renders allocate nothing.
+// The resting frame keeps its CSS animations (two layers); frames 3-49 are drawn by the frame
+// player below, so the browser never has to keep ~100 animated layers in memory.
 const frameAnim = (k) => `swish-loader-o${k}`;
 const glideAnim = (k) => `swish-loader-o${k}, swish-loader-g${k}`;
-const GROUND_STYLES = BAG_FRAMES.map(([k]) => Object.freeze({ animationName: frameAnim(k) }));
-const BAG_STYLES = BAG_FRAMES.map(([k]) => Object.freeze({ animationName: glideAnim(k) }));
 const REST_GROUND_STYLE = Object.freeze({ animationName: frameAnim(REST_FRAME) });
 const REST_BAG_STYLE = Object.freeze({ animationName: glideAnim(REST_FRAME) });
 const STREAK_STYLES = STREAKS.map((_, i) => Object.freeze({ animationName: `swish-loader-sk${i}` }));
@@ -114,6 +106,7 @@ function decode(src) {
  * @param {Function} [props.onComplete]       Fires each time SWISH completes on the display.
  * @param {string|false} [props.quote]     Line shown under the loader (the reference project's
  *                                            "Still working… good food takes a moment."); false hides it.
+ * @param {'auto'|'1x'|'2x'} [props.resolution='auto'] Footage resolution (1x on phones, 2x on large high-density screens).
  * @param {string}   [props.className]
  * @param {object}   [props.style]            e.g. { '--swish-size': '260px' } to set the loader's height.
  */
@@ -127,6 +120,7 @@ function SwishLoader({
   label = 'Loading',
   onComplete,
   quote = DEFAULT_QUOTE,
+  resolution = 'auto',
   className,
   style,
 }) {
@@ -144,12 +138,53 @@ function SwishLoader({
   const rootRef = useRef(null);
   const onCompleteRef = useRef(onComplete);
   const framesReadyRef = useRef(false);
+  const playerFailedRef = useRef(false);
   const motionRef = useRef(motion);
   motionRef.current = motion;
+  const bagSlots = useRef([]);
+  const groundSlots = useRef([]);
+  // Footage resolution, chosen once: 1x on phones and ordinary screens (a quarter of the memory),
+  // 2x only for a large loader on a high-density screen.
+  const [sheets] = useState(() => {
+    try {
+      return pickSheets(resolution);
+    } catch {
+      return pickSheets('1x');
+    }
+  });
 
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
+
+  // Frame player: draws video frames 3-49 into three slots, clocked by the stand-in bag's CSS
+  // animation (see player.js). If it cannot run, the CSS-only stand-in bag is shown instead.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+    let stop = () => {};
+    try {
+      stop = startFramePlayer({
+        clockEl: root.querySelector('.swish-loader__fallback-bag'),
+        bagSlots: bagSlots.current,
+        groundSlots: groundSlots.current,
+        frames: FRAMES,
+        sheetHref: (sheet) => `#${ids.sheet(sheet)}`,
+        onFail: (error) => {
+          playerFailedRef.current = true;
+          framesReadyRef.current = false;
+          root.setAttribute('data-fallback', '');
+          console.warn('[swish] frame player unavailable, using the built-in bag:', error);
+        },
+      });
+    } catch (error) {
+      playerFailedRef.current = true;
+      root.setAttribute('data-fallback', '');
+      console.warn('[swish] frame player unavailable, using the built-in bag:', error);
+    }
+    return () => stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Hold at t = 0 (an empty scale, exactly like the first video frame) until the
   // layers are decoded. If the footage is slow or unavailable, start with the
@@ -207,10 +242,10 @@ function SwishLoader({
     root.setAttribute('data-pending', '');
 
     const inline = Promise.all(INLINE_SOURCES.map((src) => decode(src).catch(() => undefined)));
-    const frames = Promise.all(FRAME_SOURCES.map(decode));
+    const frames = Promise.all([...sheets.bag, sheets.ground, sheets.seal].map(decode));
     frames.then(
       () => {
-        framesReadyRef.current = true;
+        framesReadyRef.current = !playerFailedRef.current;
         trySwap();
       },
       (error) => {
@@ -387,10 +422,10 @@ function SwishLoader({
             </linearGradient>
           ))}
           {BAG_SHEETS.map((sheet, i) => (
-            <image key={i} id={ids.sheet(i)} href={SHEET_URLS[i]} width={sheet.width} height={sheet.height} />
+            <image key={i} id={ids.sheet(i)} href={sheets.bag[i]} width={sheet.width} height={sheet.height} />
           ))}
-          <image id={ids.ground} href={GROUND_URL} width={GROUND.sheet.width} height={GROUND.sheet.height} />
-          <image id={ids.seal} href={SEAL_URL} width={SEAL_SHEET.width} height={SEAL_SHEET.height} />
+          <image id={ids.ground} href={sheets.ground} width={GROUND.sheet.width} height={GROUND.sheet.height} />
+          <image id={ids.seal} href={sheets.seal} width={SEAL_SHEET.width} height={SEAL_SHEET.height} />
         </defs>
 
         <image
@@ -405,25 +440,30 @@ function SwishLoader({
 
         {/* scale top: the bag's shadow and reflection, frame by frame */}
         <g className="swish-loader__unshadow">
-          {BAG_FRAMES.map(([k], i) => {
-            const col = i % GROUND.columns;
-            const row = Math.floor(i / GROUND.columns);
-            return (
-              <g key={k} className="swish-loader__f" style={GROUND_STYLES[i]}>
-                <svg
-                  x={GROUND.x + GROUND_INSET}
-                  y={GROUND.y + GROUND_INSET}
-                  width={GROUND.width - 2 * GROUND_INSET}
-                  height={GROUND.height - 2 * GROUND_INSET}
-                  viewBox={`${col * GROUND.width + GROUND_INSET} ${row * GROUND.height + GROUND_INSET} ${
-                    GROUND.width - 2 * GROUND_INSET
-                  } ${GROUND.height - 2 * GROUND_INSET}`}
-                >
-                  <use href={`#${ids.ground}`} />
-                </svg>
-              </g>
-            );
-          })}
+          {/* frames 3-49: filled in by the frame player (player.js) */}
+          {SLOT_KEYS.map((i) => (
+            <g
+              key={i}
+              className="swish-loader__slot"
+              display="none"
+              ref={(el) => {
+                groundSlots.current[i] = { ...groundSlots.current[i], g: el };
+              }}
+            >
+              <svg
+                x={GROUND.x + GROUND_INSET}
+                y={GROUND.y + GROUND_INSET}
+                width={GROUND.width - 2 * GROUND_INSET}
+                height={GROUND.height - 2 * GROUND_INSET}
+                viewBox={FRAMES[0].groundViewBox}
+                ref={(el) => {
+                  groundSlots.current[i] = { ...groundSlots.current[i], svg: el };
+                }}
+              >
+                <use href={`#${ids.ground}`} />
+              </svg>
+            </g>
+          ))}
           <g className="swish-loader__f swish-loader__rest swish-loader__rest-ground" style={REST_GROUND_STYLE}>
             <image
               href={INLINE.groundRest}
@@ -486,22 +526,39 @@ function SwishLoader({
               </g>
             ))}
           </g>
-          {BAG_FRAMES.map(([k, x, y, w, h, sheet, sx, sy], i) => {
-            const seal = SEAL_FRAMES[k];
-            return (
-              <g key={k} className="swish-loader__f swish-loader__glide" style={BAG_STYLES[i]}>
-                <svg x={x} y={y} width={w} height={h} viewBox={`${sx} ${sy} ${w} ${h}`}>
-                  <use href={`#${ids.sheet(sheet)}`} />
-                </svg>
-                {/* tamper tapes + FEEDBACK/QR label, registered to this frame of the bag */}
-                {seal && (
-                  <svg x={seal[0]} y={seal[1]} width={seal[2]} height={seal[3]} viewBox={`${seal[4]} ${seal[5]} ${seal[2]} ${seal[3]}`}>
-                    <use href={`#${ids.seal}`} />
-                  </svg>
-                )}
-              </g>
-            );
-          })}
+          {/* frames 3-49 (each with its tamper tapes + FEEDBACK/QR label): three slots the frame
+              player fills with whichever frames are visible, bottom to top */}
+          {SLOT_KEYS.map((i) => (
+            <g
+              key={i}
+              className="swish-loader__slot"
+              display="none"
+              ref={(el) => {
+                bagSlots.current[i] = { ...bagSlots.current[i], g: el };
+              }}
+            >
+              <svg
+                ref={(el) => {
+                  bagSlots.current[i] = { ...bagSlots.current[i], svg: el };
+                }}
+              >
+                <use
+                  href={`#${ids.sheet(0)}`}
+                  ref={(el) => {
+                    bagSlots.current[i] = { ...bagSlots.current[i], use: el };
+                  }}
+                />
+              </svg>
+              <svg
+                display="none"
+                ref={(el) => {
+                  bagSlots.current[i] = { ...bagSlots.current[i], sealSvg: el };
+                }}
+              >
+                <use href={`#${ids.seal}`} />
+              </svg>
+            </g>
+          ))}
           <g className="swish-loader__f swish-loader__glide swish-loader__rest swish-loader__rest-bag" style={REST_BAG_STYLE}>
             <image
               href={INLINE.bagRest}
