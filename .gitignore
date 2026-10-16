@@ -45,8 +45,12 @@ Claude outputs/
 # Obsolete files from earlier builds; nothing uses them (safe to delete locally)
 src/components/SwishLoader/assets/bag-frames.webp
 src/components/SwishLoader/assets/shadow-frames.webp
-src/components/SwishLoader/assets/backdrop.webp
 public/favicon.svg
-# Base styles now live inline in index.html. (Already in the repo from an earlier commit:
-# delete the file so the commit removes it; this line keeps it from coming back.)
-src/index.css
+
+# Files from the reverted slow-connection update; nothing uses them (safe to delete locally)
+vercel.json
+src/params.js
+src/components/SwishLoader/footage.js
+src/components/SwishLoader/assets/plate.webp
+src/components/SwishLoader/assets/backdrop.webp
+src/components/SwishLoader/assets/1x/

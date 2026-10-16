@@ -35,8 +35,3 @@
   white-space: nowrap;
   border: 0;
 }
-
-/* The poster in index.html already faded the quote in; keep it steady through the hand-over. */
-.app__loader .swish-loader__quote {
-  animation: none;
-}

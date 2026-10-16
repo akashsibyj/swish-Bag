@@ -48,19 +48,17 @@ Other commands:
 | URL                                   | Effect                                                      |
 | ------------------------------------- | ----------------------------------------------------------- |
 | `http://localhost:3000/?motion=always` | Animate even if the OS asks for reduced motion (e.g. over RDP) |
-| `?footage=off` / `?footage=1x` / `?footage=2x` | Force the bag footage choice (default: picked by screen and network) |
 
 ## Project structure
 
 ```
-index.html                     page shell + instant poster (scale, LED, quote) painted before any JS
-vite.config.js                 dev server on port 3000, production build, preload hints
-vercel.json                    long-term caching for the hashed files in /assets
+index.html                     page shell (grey background before JS loads)
+vite.config.js                 dev server on port 3000, production build
 scripts/preflight.mjs          Node version check + automatic npm install
 src/
-  main.jsx                     mounts the app, starts the footage early, retries a failed download
+  main.jsx                     mounts the app, global error logging
   App.jsx / App.css            the page: the loader full screen, nothing else
-  params.js                    URL switches (?motion, ?footage)
+  index.css                    base styles
   components/
     ErrorBoundary.jsx          keeps the page alive if a component fails
     SwishLoader/               the reusable loader component
@@ -69,15 +67,12 @@ src/
       SwishLoader.timeline.css keyframes measured from the reference video
       geometry.js              stage size, layer positions, timeline constants
       frames.js                position of each video frame in the image sheets
-      assets.js                small image layers (backdrop, scale, resting bag + its seals)
-      footage.js               which footage to download (if any) for this screen and network
+      assets.js                small image layers (backdrop, scale, resting bag + its seals), inlined
       readout.js               the 16-segment LCD readout (geometry, colour), shared with the LED
-      assets/plate.webp        the scale on the studio backdrop (shared with the poster)
       assets/bag-frames-0.webp the moving bag, one 2x cut-out per video frame (sheet 1 of 2)
       assets/bag-frames-1.webp the moving bag (sheet 2 of 2)
       assets/ground-frames.webp the bag's shadow/reflection on the scale top, per frame
       assets/seal-frames.webp  the tamper tapes + FEEDBACK/QR label, registered to each video frame
-      assets/1x/               the same four sheets at half resolution (phones, normal screens)
       SwishLoader.d.ts         TypeScript types
       index.js                 export
 ```
@@ -110,8 +105,6 @@ import SwishLoader from './components/SwishLoader';
 | `speed`      | `1`         | Playback-rate multiplier (clamped to 0.1–10)             |
 | `label`      | `"Loading"` | Text announced to screen readers                         |
 | `onComplete` | –           | Called each time SWiSH completes (3.36 s into a cycle)   |
-| `onStart`    | –           | Called once, when the animation (or still frame) starts  |
-| `footage`    | `"auto"`    | Bag footage: `"auto"`, `"off"` (built-in bag, no download), `"1x"`, `"2x"` |
 | `quote`      | *see below* | Line under the loader; `false` hides it                  |
 | `className`, `style` | –   | Passed to the root element                               |
 
@@ -148,42 +141,13 @@ moment."*, shown from the start. Pass `quote="…"` to change it or `quote={fals
   uses ~2 ms of main-thread time per frame and holds 60 fps with the GPU disabled.
 - **Background tabs / minimised windows:** it waits until it is visible and then starts from the
   beginning, rather than playing unseen.
-- **Slow or flaky internet** (see "Loading on a poor connection" below): an instant poster, a
-  small app download, footage only when it can arrive in time, retries, and a reload prompt.
+- **Loading:** it starts as soon as its images are decoded (about 0.5 s on a normal
+  connection). If the bag footage is not ready within 0.7 s, or fails to load, it plays a
+  built-in fallback (the resting bag moving along the measured path) and switches to the full
+  footage as soon as it has loaded and the bag is resting on the scale, where both look identical.
 - **Any screen shape:** on boxes taller or wider than the 880:720 scene the backdrop extends
   smoothly, and the bag falls in out of a soft haze at the top of the scene instead of being cut.
 - **Errors:** error boundaries keep the page alive (after a render failure the page shows
   "Loading…" and remounts the loader, up to 3 times; a failed app download shows a Reload
   button); unexpected errors are logged to the console with a `[swish]` prefix.
 - **No network needed** beyond loading the app itself; no external fonts or CDNs.
-
-## Loading on a poor connection
-
-A loader has to look right *before* everything has downloaded, so:
-
-1. **Instant poster.** `index.html` itself draws the empty scale, the green standby LED and the
-   quote, sized exactly like the loader, with nothing blocking the first paint (no stylesheet or
-   script in the way). On a slow 3G connection it appears in about half a second instead of after
-   the whole app (8–9 s before). When the animated loader starts, it starts from that same
-   picture and the poster fades away.
-2. **Small, parallel downloads.** The app's code and styles are fetched in parallel (preload
-   hints), and the scale image is a shared, cached file. What the animation needs to start is
-   about 130 KB in total.
-3. **Footage only when it helps.** The real bag footage comes in two sizes: 1x (~460 KB) for
-   phones and ordinary screens, 2x (~1.1 MB) only for a large loader on a high-density screen
-   with a fast connection. The page measures its own download speed (works in every browser) and
-   also respects Save-Data, 2G and reduced motion: when the footage could not arrive within about
-   a second, it is not downloaded at all and the built-in bag (the resting bag moved along the
-   measured path, with its seals and shadow) plays straight away. If a download is still running
-   when the drop starts, it is cancelled so the bandwidth goes back to the page.
-4. **Retries.** A failed app download is retried (under a fresh URL, since browsers remember a
-   failed module), then the page reloads itself once; if it still cannot load, the poster offers
-   a Reload button. The scale image is retried too. If the app has not appeared after 30 visible
-   seconds, the poster offers the Reload button.
-5. **Caching.** `vercel.json` marks the hashed files in `/assets` as immutable, so a returning
-   visitor downloads only the small HTML page.
-
-Measured on a phone-sized screen with throttled networks (time until the animation starts):
-fast Wi-Fi 0.3 s with footage · good 4G 1.0 s with footage · slow 4G 1.1 s · slow 3G 3.5 s ·
-2G 5.7 s (the last three with the built-in bag; before these changes slow 3G took 9.5 s and 2G
-15 s, with a blank grey screen until then).
