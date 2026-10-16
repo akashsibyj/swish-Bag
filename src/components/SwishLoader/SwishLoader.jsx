@@ -1,9 +1,6 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef } from 'react';
 import * as INLINE from './assets';
-import bagSheet0 from './assets/bag-frames-0.webp';
-import bagSheet1 from './assets/bag-frames-1.webp';
-import groundSheet from './assets/ground-frames.webp';
-import sealSheet from './assets/seal-frames.webp';
+import { acquireFootage, chooseTier, frameHeightFor, pendingTier } from './footage';
 import { BAG_FRAMES, BAG_REST, BAG_SHEETS, GROUND, REST_FRAME, SEAL_FRAMES, SEAL_SHEET } from './frames';
 import {
   TIMELINE,
@@ -19,17 +16,13 @@ import { BLOOM_STD, READOUT_CELLS, SEG_ON } from './readout';
 import './SwishLoader.timeline.css';
 import './SwishLoader.css';
 
-// Bundlers return a URL string for image imports; Next.js returns { src }.
-const assetUrl = (mod) => (typeof mod === 'string' ? mod : (mod && mod.src) || '');
-const SHEET_URLS = [assetUrl(bagSheet0), assetUrl(bagSheet1)];
-const GROUND_URL = assetUrl(groundSheet);
-const SEAL_URL = assetUrl(sealSheet);
-
 const INLINE_SOURCES = [INLINE.backdrop, INLINE.plate, INLINE.bagRest, INLINE.groundRest, INLINE.sealRest];
-const FRAME_SOURCES = [...SHEET_URLS, GROUND_URL, SEAL_URL];
 // If the footage is not decoded by then, start right away with the built-in fallback
-// (never leave an empty scale on screen) and switch to the footage once it arrives.
+// (never leave an empty scale on screen). Looping loaders switch to the footage once it arrives;
+// a play-once loader cancels the download instead (it would only ever show the resting bag,
+// which is already built in), handing the bandwidth back to the page.
 const FRAME_TIMEOUT_MS = 700;
+const FOOTAGE_CHOICES = new Set(['auto', 'off', '1x', '2x']);
 // Ground tiles are cropped 2 units inside their (fully feathered) edges, so texture filtering at
 // the crop never samples the neighbouring tile — that showed as a faint outline at fractional scales.
 const GROUND_INSET = 2;
@@ -78,6 +71,15 @@ function msUntilRest(root) {
   }
 }
 
+/** decode() with a few retries (600 ms apart) for files on a flaky connection. */
+function decodeWithRetry(src, attempts, onRetry) {
+  return decode(src).catch((error) => {
+    if (attempts <= 1) throw error;
+    onRetry?.();
+    return new Promise((resolve) => setTimeout(resolve, 600)).then(() => decodeWithRetry(src, attempts - 1, onRetry));
+  });
+}
+
 function decode(src) {
   if (!src) return Promise.reject(new Error('missing asset'));
   const img = new Image();
@@ -112,6 +114,10 @@ function decode(src) {
  * @param {number}   [props.speed=1]          Playback-rate multiplier.
  * @param {string}   [props.label="Loading"]  Accessible status text.
  * @param {Function} [props.onComplete]       Fires each time SWISH completes on the display.
+ * @param {Function} [props.onStart]          Fires once, when the animation (or the still frame) starts.
+ * @param {'auto'|'off'|'1x'|'2x'} [props.footage='auto'] Bag footage: 'auto' picks by screen and
+ *                                            network (none on Save-Data / 2G / slow links), 'off'
+ *                                            always uses the built-in bag.
  * @param {string|false} [props.quote]     Line shown under the loader (the reference project's
  *                                            "Still working… good food takes a moment."); false hides it.
  * @param {string}   [props.className]
@@ -126,6 +132,8 @@ function SwishLoader({
   speed = 1,
   label = 'Loading',
   onComplete,
+  onStart,
+  footage = 'auto',
   quote = DEFAULT_QUOTE,
   className,
   style,
@@ -146,16 +154,25 @@ function SwishLoader({
   const framesReadyRef = useRef(false);
   const motionRef = useRef(motion);
   motionRef.current = motion;
+  // Read once when the loader mounts (changing them later has no effect on a running loader).
+  const loopRef = useRef(loop);
+  const footageRef = useRef(footage);
+  const onStartRef = useRef(onStart);
+  onStartRef.current = onStart;
+  const sheetRefs = useRef([]);
+  const groundRef = useRef(null);
+  const sealRef = useRef(null);
+  const plateRef = useRef(null);
 
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
 
-  // Hold at t = 0 (an empty scale, exactly like the first video frame) until the
-  // layers are decoded. If the footage is slow or unavailable, start with the
-  // built-in fallback (the resting bag moved along the measured path) and switch
-  // to the footage as soon as it is decoded AND the bag is at rest, where both
-  // look identical — so the swap is never visible.
+  // Hold at t = 0 (an empty scale, exactly like the first video frame) until the inline layers
+  // are decoded and the footage has had a short chance to arrive. Without the footage (slow
+  // network, Save-Data, failure) the built-in fallback plays: the resting bag moved along the
+  // measured path. Looping loaders switch to the footage once it is decoded AND the bag is at
+  // rest, where both look identical; play-once loaders cancel the download instead.
   useIsomorphicLayoutEffect(() => {
     const root = rootRef.current;
     if (!root || typeof Image === 'undefined') return undefined;
@@ -164,8 +181,18 @@ function SwishLoader({
     let startTimer = 0;
     let swapTimer = 0;
     let waitingForVisible = false;
+    let footage = null;
 
     const isHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    const reducedStill = motionRef.current !== 'always' && prefersReducedMotion();
+    const looping = loopRef.current;
+    const notifyStart = () => {
+      try {
+        onStartRef.current?.();
+      } catch (error) {
+        console.error('[swish] onStart callback threw:', error);
+      }
+    };
     const start = () => {
       if (cancelled || started) return;
       // Never start in a background tab or minimised window: it would play unseen and
@@ -177,6 +204,13 @@ function SwishLoader({
       started = true;
       clearTimeout(startTimer);
       root.removeAttribute('data-pending');
+      // A play-once loader that started without the footage never needs it (after the drop it
+      // shows the built-in resting bag either way): cancel the download, free the bandwidth.
+      if (!looping && footage && !framesReadyRef.current) {
+        footage.release();
+        footage = null;
+      }
+      notifyStart();
     };
     const startWithFallback = () => {
       if (cancelled || started) return;
@@ -205,23 +239,75 @@ function SwishLoader({
     };
 
     root.setAttribute('data-pending', '');
+    root.setAttribute('data-fallback', ''); // until the footage is actually on the page
 
-    const inline = Promise.all(INLINE_SOURCES.map((src) => decode(src).catch(() => undefined)));
-    const frames = Promise.all(FRAME_SOURCES.map(decode));
+    // The plate is a (cached) file: retry it on a flaky connection and, if the first attempt
+    // failed, point its <image> at it again so the scale is drawn.
+    let plateRetried = false;
+    const inline = Promise.all(
+      INLINE_SOURCES.map((src) =>
+        decodeWithRetry(src, 3, () => {
+          if (src === INLINE.plate) plateRetried = true;
+        }).catch(() => undefined)
+      )
+    ).then(() => {
+      if (plateRetried && !cancelled && plateRef.current) {
+        plateRef.current.removeAttribute('href');
+        plateRef.current.setAttribute('href', INLINE.plate);
+      }
+    });
+
+    // Which footage, if any: reuse a download the app already started, else pick by screen and network.
+    let tier = 'off';
+    if (!reducedStill) {
+      const request = FOOTAGE_CHOICES.has(footageRef.current) ? footageRef.current : 'auto';
+      try {
+        const rect = root.getBoundingClientRect();
+        const early = request === 'auto' ? pendingTier() : null;
+        tier = early || chooseTier({ frameHeight: frameHeightFor(rect.width, rect.height), motion: motionRef.current, request });
+      } catch {
+        tier = '1x';
+      }
+    }
+    root.setAttribute('data-footage', tier);
+    footage = tier === 'off' ? null : acquireFootage(tier);
+
+    const frames = footage
+      ? footage.ready.then((urls) => {
+          if (cancelled) throw new Error('unmounted');
+          // Point the atlas <image>s at the downloaded files, then give the browser two frames
+          // to paint them before anything that uses them becomes visible.
+          sheetRefs.current.forEach((el, i) => el?.setAttribute('href', urls[i]));
+          groundRef.current?.setAttribute('href', urls[2]);
+          sealRef.current?.setAttribute('href', urls[3]);
+          return new Promise((resolve) => {
+            const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (f) => setTimeout(f, 16);
+            raf(() => raf(resolve));
+          });
+        })
+      : Promise.reject(new Error(tier === 'off' ? 'footage off' : 'footage unavailable'));
     frames.then(
       () => {
+        if (cancelled) return;
         framesReadyRef.current = true;
+        if (!started) root.removeAttribute('data-fallback');
         trySwap();
       },
       (error) => {
         framesReadyRef.current = false;
-        console.warn('[swish] bag footage unavailable, using the built-in fallback:', error);
+        if (!cancelled && tier !== 'off' && footage) {
+          console.warn('[swish] bag footage unavailable, using the built-in fallback:', error);
+        }
       }
     );
 
-    if (motionRef.current !== 'always' && prefersReducedMotion()) {
+    if (reducedStill) {
       // Reduced motion shows a still frame built from the inline layers only.
-      startWithFallback();
+      inline.then(startWithFallback);
+    } else if (!footage) {
+      // No footage wanted (slow network / Save-Data): play the built-in bag as soon as it is ready.
+      inline.then(startWithFallback);
+      if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
     } else {
       inline.then(() => frames).then(start, startWithFallback);
       if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
@@ -232,9 +318,50 @@ function SwishLoader({
       cancelled = true;
       clearTimeout(startTimer);
       clearTimeout(swapTimer);
+      if (footage) footage.release();
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
+
+  // Loader size, computed from the box it is actually given (works the same in every browser;
+  // the CSS version relies on container/viewport units, which some mobile browsers resolve
+  // differently - an iPhone showed the loader oversized and the quote running off the screen).
+  // Skipped when the host sets --swish-size itself.
+  const fixedSize = style && typeof style === 'object' && style['--swish-size'] != null;
+  useIsomorphicLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || fixedSize) return undefined;
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      try {
+        const { width: w, height: h } = root.getBoundingClientRect();
+        if (!(w > 0 && h > 0)) return;
+        // 44% of the shorter side (190-360 px), leaving room above, below and at the sides.
+        const size = frameHeightFor(w, h);
+        root.style.setProperty('--swish-frame-h', `${Math.max(80, Math.round(size * 10) / 10)}px`);
+      } catch {
+        root.style.removeProperty('--swish-frame-h'); // CSS sizing takes over
+      }
+    };
+    const schedule = () => {
+      if (!frame && typeof window !== 'undefined') frame = window.requestAnimationFrame(apply);
+    };
+    apply();
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(schedule);
+      ro.observe(root);
+    } else if (typeof window !== 'undefined') {
+      window.addEventListener('resize', schedule);
+    }
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      if (ro) ro.disconnect();
+      else if (typeof window !== 'undefined') window.removeEventListener('resize', schedule);
+      root.style.removeProperty('--swish-frame-h');
+    };
+  }, [fixedSize]);
 
   const handleMarker = useCallback((event) => {
     if (event.animationName !== 'swish-loader-mark') return;
@@ -343,10 +470,19 @@ function SwishLoader({
             </linearGradient>
           ))}
           {BAG_SHEETS.map((sheet, i) => (
-            <image key={i} id={ids.sheet(i)} href={SHEET_URLS[i]} width={sheet.width} height={sheet.height} />
+            <image
+              key={i}
+              ref={(el) => {
+                sheetRefs.current[i] = el;
+              }}
+              id={ids.sheet(i)}
+              width={sheet.width}
+              height={sheet.height}
+            />
           ))}
-          <image id={ids.ground} href={GROUND_URL} width={GROUND.sheet.width} height={GROUND.sheet.height} />
-          <image id={ids.seal} href={SEAL_URL} width={SEAL_SHEET.width} height={SEAL_SHEET.height} />
+          {/* the atlases get their href once downloaded (see the footage effect) */}
+          <image ref={groundRef} id={ids.ground} width={GROUND.sheet.width} height={GROUND.sheet.height} />
+          <image ref={sealRef} id={ids.seal} width={SEAL_SHEET.width} height={SEAL_SHEET.height} />
         </defs>
 
         <image
@@ -357,7 +493,7 @@ function SwishLoader({
           height={BACKDROP.height}
           preserveAspectRatio="none"
         />
-        <image href={INLINE.plate} x="0" y="0" width={STAGE.width} height={STAGE.height} />
+        <image ref={plateRef} href={INLINE.plate} x="0" y="0" width={STAGE.width} height={STAGE.height} />
 
         {/* scale top: the bag's shadow and reflection, frame by frame */}
         <g className="swish-loader__unshadow">

@@ -96,7 +96,17 @@ if (missing.length > 0 || lockfileNewerThanInstall()) {
 
 // 3. Loader assets -------------------------------------------------------------
 const assetDir = join(root, 'src', 'components', 'SwishLoader', 'assets');
-for (const file of ['bag-frames-0.webp', 'bag-frames-1.webp', 'ground-frames.webp', 'seal-frames.webp']) {
+for (const file of [
+  'plate.webp',
+  'bag-frames-0.webp',
+  'bag-frames-1.webp',
+  'ground-frames.webp',
+  'seal-frames.webp',
+  '1x/bag-frames-0.webp',
+  '1x/bag-frames-1.webp',
+  '1x/ground-frames.webp',
+  '1x/seal-frames.webp',
+]) {
   if (!existsSync(join(assetDir, file))) {
     fail(`Missing asset src/components/SwishLoader/assets/${file}. Restore it from the project files.`);
   }

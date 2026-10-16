@@ -13,6 +13,14 @@ export interface SwishLoaderProps {
   label?: string;
   /** Fires each time SWISH completes on the display (3.36 s into each cycle). */
   onComplete?: () => void;
+  /** Fires once, when the animation (or the reduced-motion still frame) starts. */
+  onStart?: () => void;
+  /**
+   * Bag footage. 'auto' (default) picks the 1x (~460 KB) or 2x (~1.1 MB) set by screen size and
+   * network, and none on Save-Data, 2G or a measured slow connection; 'off' always uses the
+   * built-in bag (no download). The footage is cancelled if the drop starts without it.
+   */
+  footage?: 'auto' | 'off' | '1x' | '2x';
   /** Line shown under the loader. Default "Still working… good food takes a moment."; false hides it. */
   quote?: string | false;
   className?: string;

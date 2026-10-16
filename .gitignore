@@ -45,4 +45,8 @@ Claude outputs/
 # Obsolete files from earlier builds; nothing uses them (safe to delete locally)
 src/components/SwishLoader/assets/bag-frames.webp
 src/components/SwishLoader/assets/shadow-frames.webp
+src/components/SwishLoader/assets/backdrop.webp
 public/favicon.svg
+# Base styles now live inline in index.html. (Already in the repo from an earlier commit:
+# delete the file so the commit removes it; this line keeps it from coming back.)
+src/index.css
